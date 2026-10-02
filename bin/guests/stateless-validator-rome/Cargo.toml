@@ -1,0 +1,50 @@
+[workspace.package]
+
+[package]
+name = "zec-rome"
+description = "ZisK Ethereum Client Stateless Validator Rome — proves one finalized rome-zk batch"
+version = "0.1.0"
+edition = "2024"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[dependencies]
+guest-rome = { path = "../../../crates/clients/rome/guest" }
+
+ziskos = "1.2.0-alpha"
+
+# alloy — pinned exact (matching this ELF's stateless-validator-reth sibling's own resolved Cargo.lock):
+# this is its own standalone workspace (own Cargo.lock), so nothing else here constrains guest-rome's
+# transitive alloy-* deps down to a toolchain-compatible version — an unpinned resolve picked
+# alloy-consensus 2.4.2, which needs a newer rustc than this box's ZisK toolchain ships (found while
+# building this ELF and its bench-rome-dahash sibling).
+alloy-consensus = { version = "=2.0.5", default-features = false }
+alloy-primitives = { version = "=1.6.0", features = ["native-keccak"] }
+alloy-eips = { version = "=2.0.5", default-features = false }
+alloy-genesis = "=2.0.5"
+alloy-rpc-types-debug = "=2.0.5"
+alloy-serde = "=2.0.5"
+alloy-tx-macros = "=2.0.5"
+
+# revm
+revm = { version = "38.0.0", default-features = false }
+
+# Needed for deterministic Hashmap sort — same patch stateless-validator-reth (this ELF's sibling)
+# depends on, for the same reason: guest-rome reuses guest-reth's own stateless-validation path, which
+# needs this exactly as guest-reth does.
+alloy-evm = { git = "https://github.com/0xPolygonHermez/zisk-patch-alloy-evm.git", branch = "zisk-hints/v0.33.3" }
+
+[patch."https://github.com/paradigmxyz/reth.git"]
+# Needed for deterministic Hashmap sort
+reth-trie-common = { git = "https://github.com/0xPolygonHermez/zisk-patch-reth.git", branch = "zisk-hints/v2.1.0" }
+
+[patch.crates-io]
+# Route 256-bit MULMOD/ADDMOD through the ZisK `arith256_mod` accelerator.
+ruint = { git = "https://github.com/0xPolygonHermez/zisk-patch-ruint.git", branch = "zisk-patch/v1.19.0" }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(zisk_hints)'] }

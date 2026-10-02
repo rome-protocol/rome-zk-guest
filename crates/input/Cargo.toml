@@ -1,0 +1,30 @@
+[package]
+name = "input"
+description = ""
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+input-core.workspace = true
+input-reth = { workspace = true, optional = true }
+input-ethrex = { workspace = true, optional = true }
+# No C++ by default; the native FFI is opt-in via `ziskethone-native-ffi`.
+input-ziskethone = { workspace = true, optional = true }
+
+clap = { workspace = true, optional = true }
+
+[features]
+# Per-client features keep each `match Client` exhaustive: a consumer's enabled
+# variants and its `create_client` arms must line up. `reth` is the default;
+# `ethrex`/`ziskethone` are opt-in. None pulls C++ — that's `ziskethone-native-ffi`.
+default = ["reth"]
+cli = ["dep:clap"]
+reth = ["dep:input-reth"]
+ethrex = ["dep:input-ethrex"]
+ziskethone = ["dep:input-ziskethone"]
+# Native C++ `run()` FFI (clang >= 15 / g++ >= 12 + submodule). Implies
+# `ziskethone` so the client is actually selectable, not just built.
+ziskethone-native-ffi = ["ziskethone", "input-ziskethone/native-ffi"]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(zisk_hints)'] }

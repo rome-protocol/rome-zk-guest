@@ -1,0 +1,19 @@
+# The chain's rules are baked into the `guest-rome` ELF at compile time, not
+# supplied by the host. `ROME_CHAIN_GENESIS` names the genesis file `guest-rome::chain_config` embeds via
+# `include_str!(env!("ROME_CHAIN_GENESIS"))` — set here, at the fork root, rather than only under
+# `bin/guests/stateless-validator-rome/.cargo/config.toml`, because cargo resolves `[env]` by walking UP
+# from the invoking directory: `guest-rome`'s own host tests run from `crates/clients/rome/guest` (this
+# crate's own README), a DIFFERENT directory than the real ELF build
+# (`bin/guests/stateless-validator-rome`) — only a config file at an ancestor of BOTH (this repo's root)
+# reaches both invocations. `relative = true` resolves the path against this file's own directory, so it
+# is correct regardless of which subdirectory cargo is invoked from.
+#
+# Tiber's genesis (`chains/tiber-200101.genesis.json`) matches the canonical genesis file.
+# See `guest-rome::chain_config`'s documentation and tests for the drift check.
+#
+# `force = true`: without it, Cargo's `[env]` yields to an
+# already-set PROCESS environment variable — a shell with a stale/foreign `ROME_CHAIN_GENESIS` exported
+# would silently override this file, embedding the wrong chain's rules with no error. `force = true`
+# makes chain selection unconditional on this config, never a silently-inherited shell variable.
+[env]
+ROME_CHAIN_GENESIS = { value = "chains/tiber-200101.genesis.json", relative = true, force = true }

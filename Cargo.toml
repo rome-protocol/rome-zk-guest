@@ -1,0 +1,146 @@
+[workspace]
+members = [
+    "bin/host",
+    "bin/hints-gen",
+    "bin/input-gen",
+    "crates/input",
+    "crates/input-gen",
+    "crates/common/*",
+    # Each client is a pair of crates: crates/clients/<client>/{guest,input}.
+    # The glob requires that two-level nesting — a crate placed directly at
+    # crates/clients/<client>/ is silently NOT a workspace member.
+    "crates/clients/*/*",
+    "tests",
+    "tools/ziskethone-to-reth",
+]
+#
+# `guest-rome`/`input-rome` (`crates/clients/rome/{guest,input}`) remain ordinary
+# `crates/clients/*/*` members here — NOT added to `exclude`, despite their path dependencies
+# (`rome-zk-layouts`/`rome-zk-merkle`/`rome-zk-channel`/`rome-zk-executor-api` at
+# `../../../../../crates/<name>`) only resolving when this fork is checked out as `.fork/` nested inside
+# a parent workspace. Excluding them was tried and reverted: a package removed from `members` is no
+# longer treated as part of THIS workspace for inheritance purposes either — `version.workspace = true`/
+# `edition.workspace = true`/every `{dep}.workspace = true` in its own manifest then fails to resolve
+# ("error inheriting `alloy-consensus` from workspace root manifest's `workspace.dependencies.alloy-
+# consensus` ... `workspace.dependencies` was not defined"), reproduced twice: once via a
+# real `cargo-zisk build --release` of `bin/guests/stateless-validator-rome` (which path-depends on
+# `guest-rome`), and again directly via `cd crates/clients/rome/guest && cargo metadata` with the same
+# exclude applied. Excluding these crates breaks the ELF build, so they remain workspace members.
+# The required checkout layout is documented in the top-level README
+# ("Building `guest-rome` / `zec-rome`"). The build recipe in
+# `crates/clients/rome/guest/README.md` also includes the submodule-init step.
+# A bare, standalone checkout of this fork's `cargo clippy --locked --workspace`
+# still fails on `guest-rome`/`input-rome` specifically (an ordinary Cargo "path not found", never
+# silent) — documented as the known, intentional shape, not fixed by hiding the two crates from the
+# workspace.
+exclude = ["tools/migrate-inputs", "third_party/ziskethone/rust-input-gen"]
+resolver = "2"
+
+[workspace.package]
+version = "0.10.0"
+edition = "2021"
+
+[workspace.dependencies]
+guest-common = { path = "crates/common/guest-common" }
+guest-ethrex = { path = "crates/clients/ethrex/guest" }
+guest-reth = { path = "crates/clients/reth/guest" }
+guest-ziskethone = { path = "crates/clients/ziskethone/guest" }
+input = { path = "crates/input" }
+input-core = { path = "crates/common/input-core" }
+input-ethrex = { path = "crates/clients/ethrex/input" }
+input-reth = { path = "crates/clients/reth/input" }
+input-ziskethone = { path = "crates/clients/ziskethone/input" }
+
+# zisk-sdk = { git = "https://github.com/0xPolygonHermez/zisk.git", branch = "pre-develop-1.2.0-alpha" }
+# zisk-zkvm-interface = { git = "https://github.com/0xPolygonHermez/zisk.git", branch = "pre-develop-1.2.0-alpha" }
+# ziskos = { git = "https://github.com/0xPolygonHermez/zisk.git", branch = "pre-develop-1.2.0-alpha" }
+rust-input-gen = { path = "third_party/ziskethone/rust-input-gen" }
+
+# crates.io dependencies
+zisk-sdk = "1.2.0-alpha"
+zisk-zkvm-interface = "1.2.0-alpha"
+ziskos = "1.2.0-alpha"
+
+# Local development
+# zisk-sdk = { path = "../zisk/sdk" }
+# zisk-zkvm-interface = { path = "../zisk/zkvm-interface" }
+# ziskos = { path = "../zisk/ziskos/entrypoint" }
+
+revm = { version = "38.0.0", default-features = false }
+
+# types (for reth)
+alloy-rlp = "0.3"
+alloy-primitives = "1.5.6"
+alloy = "2.0.0"
+alloy-consensus = { version = "2.0.0", default-features = false }
+alloy-json-rpc = "2.0.0"
+alloy-provider = "2.0.0"
+alloy-rpc-client = "2.0.0"
+alloy-transport = "2.0.0"
+alloy-transport-http = { version = "2.0.0", features = ["reqwest"] }
+alloy-genesis = "2.0.0"
+alloy-eips = "2.0.0"
+alloy-rpc-types-eth = "2.0.0"
+alloy-rpc-types-debug = "2.0.0"
+
+# reth
+reth-primitives-traits = { version = "0.3.0", default-features = false }
+reth-chainspec = { git = "https://github.com/paradigmxyz/reth", tag = "v2.1.0", default-features = false }
+reth-ethereum-primitives = { git = "https://github.com/paradigmxyz/reth", tag = "v2.1.0", default-features = false }
+reth-evm-ethereum = { git = "https://github.com/paradigmxyz/reth", tag = "v2.1.0", default-features = false }
+reth-rpc-api = { git = "https://github.com/paradigmxyz/reth", tag = "v2.1.0", default-features = false }
+stateless-reth = { git = "https://github.com/paradigmxyz/stateless", rev = "e5480e71a8031641ff471cad9dc482a7a14b32d5", package = "stateless" }
+stateless-reth-tries = { git = "https://github.com/paradigmxyz/stateless", rev = "e5480e71a8031641ff471cad9dc482a7a14b32d5", package = "tries" }
+
+# types (for ethrex)
+primitive-types = "0.13.1"
+ethereum-types = "0.15.1"
+
+# ethrex
+ethrex-config = { git = "https://github.com/lambdaclass/ethrex.git", tag = "v20.0.0" }
+ethrex-common = { git = "https://github.com/lambdaclass/ethrex.git", tag = "v20.0.0", default-features = false }
+ethrex-rpc = { git = "https://github.com/lambdaclass/ethrex.git", tag = "v20.0.0" }
+ethrex-crypto = { git = "https://github.com/lambdaclass/ethrex.git", tag = "v20.0.0", default-features = false }
+stateless-ethrex = { git = "https://github.com/lambdaclass/ethrex.git", tag = "v20.0.0", default-features = false, package = "ethrex-guest-program" }
+
+# eth-act
+witness-generator = { git = "https://github.com/eth-act/zkevm-benchmark-workload.git", rev = "6786b2b9f002151e383e88cf2a693899ca73d169" }
+
+# common dependencies
+anyhow = "1.0"
+async-trait = "0.1"
+bincode = { version = "2.0", default-features = false, features = [
+  "serde",
+  "std",
+] }
+clap = { version = "4.5.7", features = ["derive", "env"] }
+dotenv = "0.15.0"
+eyre = "0.6.12"
+k256 = { version = "0.13.4" }
+tiny-keccak = { version = "2.0.0", features = ["keccak"] }
+rayon = "1.11.0"
+serde = "1.0"
+serde_with = "3.14"
+serde_json = "1.0"
+tokio = { version = "1.21", default-features = false, features = [
+  "rt",
+  "rt-multi-thread",
+] }
+tokio-util = { version = "0.7", features = ["rt"] }
+url = "2.3"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+walkdir = "2"
+jsonrpsee = { version = "0.26", features = ["http-client"] }
+http = "1.4.0"
+tempfile = "3"
+rkyv = { version = "0.8.10", features = ["std", "unaligned"] }
+hex-literal = "0.4.1"
+
+# Route 256-bit MULMOD/ADDMOD through the ZisK arith256_mod accelerator.
+# Must match the same patch in bin/guests/stateless-validator-reth/Cargo.toml
+# so the native hints-gen/host builds emit the same accelerator hints the
+# guest ELF consumes (otherwise the prover's event and hint streams desync).
+[patch.crates-io]
+ruint = { git = "https://github.com/0xPolygonHermez/zisk-patch-ruint.git", branch = "zisk-patch/v1.19.0" }
+# ruint = { path = "../zisk-patch-ruint" }

@@ -1,0 +1,33 @@
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+members = ["reth/*"]
+resolver = "2"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[workspace.dependencies]
+# ziskos = { git = "https://github.com/0xPolygonHermez/zisk.git", branch = "pre-develop-1.2.0-alpha" }
+# crates.io dependencies
+ziskos = "1.2.0-alpha"
+# Local development
+# ziskos = { path = "../../../../zisk/ziskos/entrypoint" }
+
+common = { path = "reth/common" }
+guest-reth = { path = "../../crates/clients/reth/guest" }
+
+revm = { version = "38.0.0", default-features = false }
+
+alloy-primitives = { version = "1.5.6", default-features = false }
+alloy-consensus = { version = "2.0.0", default-features = false }
+
+hex = "0.4"
+num-bigint = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"

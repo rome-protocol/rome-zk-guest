@@ -1,0 +1,13 @@
+[package]
+name = "input-rome"
+description = "ExecutionClient wiring for the rome guest (guest-rome). Unlike input-reth (which fetches directly from an Ethereum RPC), a rome batch's input is built by rome-zk-prover-input in the rome-zk repo — a Solana zk-inbox read plus a reth-verifier debug_executionWitness fetch, which needs Solana RPC client deps this fork does not carry. from_rpc here is intentionally unimplemented; this crate exists so guest-rome's run()/input_stats surface through the same ExecutionClient abstraction bin/host's other clients use."
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+guest-rome = { path = "../guest" }
+input-core.workspace = true
+
+anyhow.workspace = true
+async-trait.workspace = true
+zisk-sdk.workspace = true

@@ -1,0 +1,75 @@
+[package]
+name = "guest-rome"
+description = "ZisK guest for Rome protocol: proves ONE finalized batch — DA binding over the inbox's chunk bodies, channel decode/equality against the witnessed blocks, per-block derivation-rule assertion, per-block reth stateless validation chained block-to-block, and the public-values-v2 commit. Not a fork of guest-reth's logic; calls guest-reth's own stateless-validation functions for per-block execution."
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+ziskos.workspace = true
+
+# Reuses `guest-reth`'s public `recover_signers`, `verify_signatures`, `validate_block_stateless`,
+# and `get_chain_spec` functions directly. This path has already been proved on BPF/ZisK for chain
+# 200100. This guest calls it per block instead of reimplementing stateless validation.
+#
+guest-reth.workspace = true
+
+alloy-primitives = { version = "1.5.6", default-features = false, features = ["rlp", "native-keccak"] }
+alloy-rlp = { version = "0.3", features = ["derive"] }
+alloy-eips.workspace = true
+alloy-genesis.workspace = true
+alloy-consensus = { workspace = true, default-features = false, features = [
+  "crypto-backend",
+  "k256",
+] }
+alloy-rpc-types-debug.workspace = true
+
+reth-chainspec.workspace = true
+reth-ethereum-primitives.workspace = true
+
+serde = { version = "1", features = ["derive"] }
+serde_with.workspace = true
+bincode.workspace = true
+
+# The DA logic uses the same crates as the on-chain program, zk-inbox-client, and rome-zk-derive,
+# with one shared definition for each fact.
+# These path dependencies require this checkout to be nested as `.fork/` under their parent workspace.
+# Copying the entire workspace preserves that relative layout across build directories.
+# See this crate's README for the required layout and why git dependencies are not used.
+#
+#
+rome-zk-layouts = { path = "../../../../../crates/rome-zk-layouts", default-features = false }
+rome-zk-merkle = { path = "../../../../../crates/rome-zk-merkle" }
+rome-zk-channel = { path = "../../../../../crates/rome-zk-channel", default-features = false, features = [
+  "decode-pure",
+] }
+# The shared header rule (`canonical_header_rule`) has three consumers:
+# this guest, the sequencer's block env, and derive's PayloadAttributes construction. Its own
+# deps are alloy-primitives + thiserror only (verified: builds for the zisk target, no solana-program, no
+# C toolchain), so a path dep costs this guest nothing extra.
+rome-zk-executor-api = { path = "../../../../../crates/rome-zk-executor-api" }
+# The chain's genesis config is embedded at compile time (`chain_config.rs`),
+# parsed at runtime with serde_json — real production code now, not test-only.
+serde_json = "1"
+
+[dev-dependencies]
+hex = "0.4"
+
+# `build.rs` parses the same genesis file `chain_config.rs` embeds via
+# `include_str!`, to print its sha256 + chain id as a build warning — a HOST-side tool, so this never
+# reaches the zisk target or affects the guest ELF itself. `sha2` is already in this workspace's
+# dependency graph (revm-precompile's SHA-256 precompile pulls it in) — no new crate is being added to
+# what's already resolved, only a new `[build-dependencies]` edge onto an existing one.
+[build-dependencies]
+sha2 = "0.10"
+serde_json = "1"
+
+[features]
+# Off by default (production uses the accelerated path). Used only by
+# bin/guests/bench-rome-dahash to measure the DA-hash stage's software-keccak step count, for direct
+# comparison against the same stage's accelerated-keccak step count.
+bench-software-keccak = []
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = [
+  'cfg(target_vendor, values("zisk"))',
+] }
