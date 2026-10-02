@@ -104,7 +104,7 @@ README, "Building `guest-rome` / `zec-rome`"), with the `third_party/ziskethone`
 even though this crate does not use it directly — it is part of loading this repo's workspace at all:
 
 ```sh
-cd <rome-zk-worktree-root>/.fork
+cd <your rome-zk-evm checkout>/.fork
 git submodule update --init third_party/ziskethone   # if not already done
 cd crates/clients/rome/guest
 cargo test          # host tests: no ziskos I/O touched (src/run.rs's execute(), not run())

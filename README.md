@@ -94,12 +94,12 @@ without those dependencies. Building the standalone
 `bin/guests/bench-rome-dahash` packages also requires
 the nested layout.
 
-Clone the fork inside the parent workspace using this layout:
+Clone this repository as `.fork/` at the root of a [rome-zk-evm](https://github.com/rome-protocol/rome-zk-evm) checkout:
 
 ```bash
-cd <rome-zk-worktree-root>
-git clone https://github.com/rome-protocol/zisk-eth-client.git .fork
-cd .fork && git checkout rome-guest
+cd <your rome-zk-evm checkout>
+git clone --branch v0.1.1 https://github.com/rome-protocol/rome-zk-guest.git .fork
+cd .fork
 git submodule update --init third_party/ziskethone
 ```
 

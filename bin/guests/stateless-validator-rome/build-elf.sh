@@ -28,7 +28,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# This checkout's own root (the fork, `rome-protocol/zisk-eth-client`) — computed from this script's own
+# This checkout's own root (the fork, `rome-protocol/rome-zk-guest`) — computed from this script's own
 # location (three levels up: bin/guests/stateless-validator-rome -> bin/guests -> bin -> fork root),
 # without `git rev-parse`: copies of this checkout can omit every `.git` directory,
 # including those in nested repositories.
@@ -43,7 +43,7 @@ FORK_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 # own "path not found" error stand in for it.
 if [ "$(basename "$FORK_ROOT")" != ".fork" ]; then
   echo "build-elf.sh: refusing — this checkout's root is '$FORK_ROOT', not a directory named '.fork'." >&2
-  echo "This fork must be cloned as '.fork/' directly under a rome-zk worktree for its path" >&2
+  echo "This fork must be cloned as '.fork/' directly under a rome-zk-evm checkout for its path" >&2
   echo "dependencies (rome-zk-layouts, rome-zk-merkle, rome-zk-channel, rome-zk-executor-api) to resolve." >&2
   exit 1
 fi
