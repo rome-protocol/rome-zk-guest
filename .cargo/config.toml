@@ -8,8 +8,10 @@
 # reaches both invocations. `relative = true` resolves the path against this file's own directory, so it
 # is correct regardless of which subdirectory cargo is invoked from.
 #
-# Tiber's genesis (`chains/tiber-200101.genesis.json`) matches the canonical genesis file.
-# See `guest-rome::chain_config`'s documentation and tests for the drift check.
+# The value below is the default: an example chain's genesis, `chains/tiber-200101.genesis.json`. To build
+# for your own chain pass `--genesis <file>` to `bin/guests/stateless-validator-rome/build-elf.sh`, which
+# points a generated copy of this file (inside its staging directory) at your genesis and leaves this one
+# alone. See `guest-rome::chain_config`'s documentation and tests for the drift check.
 #
 # `force = true`: without it, Cargo's `[env]` yields to an
 # already-set PROCESS environment variable — a shell with a stale/foreign `ROME_CHAIN_GENESIS` exported

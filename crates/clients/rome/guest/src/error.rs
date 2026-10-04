@@ -19,6 +19,8 @@ pub enum RomeGuestError {
     /// The recomputed `expected_count` (the number of chunk bodies given) disagrees with the batch
     /// account's own `expected_count` field.
     ExpectedCountMismatch { given: usize, expected: u32 },
+    /// `deposit_from + deposits.len()` does not fit a `u64` — no real queue reaches it.
+    DepositRangeOverflow { from: u64, count: usize },
     /// The channel decoder recovered a different number of blocks than the witnessed range.
     ChannelBlockCountMismatch { decoded: usize, expected: usize },
     /// One decoded channel block disagrees with the witnessed block at the same index, in the named
@@ -28,6 +30,22 @@ pub enum RomeGuestError {
     /// `public.chain_id` disagrees with the chain id embedded in this ELF's own baked-in genesis config
     /// — a proof under this chain's vkey can only ever claim its chain's rules.
     ChainConfigIdMismatch { embedded: u64, public: u64 },
+    /// The stream's fifth block field (`deposits_end`) is not strictly above the previous value, where
+    /// the batch's `deposit_from` counts as the value before block 0. Equal and decreasing both land here.
+    DepositsEndRefused {
+        block_index: usize,
+        previous: u64,
+        got: u64,
+    },
+    /// The stream's last `deposits_end` value is not `deposit_from + deposits.len()`: the stream does not
+    /// end at the range the DA commitment bound. A fifth field in a deposit-free batch lands here.
+    DepositsEndMismatch { last: u64, to: u64 },
+    /// `blocks[i].body.withdrawals` is not exactly block `i`'s slice of the deposit range (a missing or
+    /// extra withdrawal, or a wrong index, recipient or amount).
+    WithdrawalsMismatch { index: usize },
+    /// One withdrawals slice was not given per block — an input the caller built wrongly, refused the same
+    /// way `WitnessCountMismatch` refuses a wrong witness count.
+    WithdrawalSliceCountMismatch { blocks: usize, slices: usize },
     /// `blocks[i].header.parent_hash` does not chain to the previous block's hash (or, for `i == 0`, to
     /// `keccak(rlp(parent_header))`).
     ParentChainBroken { index: usize },
@@ -69,6 +87,10 @@ impl fmt::Display for RomeGuestError {
                 f,
                 "ExpectedCountMismatch: {given} chunk bodies given, batch account expects {expected}"
             ),
+            Self::DepositRangeOverflow { from, count } => write!(
+                f,
+                "DepositRangeOverflow: deposit_from {from} plus {count} deposits overflows u64"
+            ),
             Self::ChannelBlockCountMismatch { decoded, expected } => write!(
                 f,
                 "ChannelBlockCountMismatch: channel decoded {decoded} blocks, witnessed range has {expected}"
@@ -79,6 +101,22 @@ impl fmt::Display for RomeGuestError {
             Self::ChainConfigIdMismatch { embedded, public } => write!(
                 f,
                 "ChainConfigIdMismatch: embedded chain id {embedded} != public.chain_id {public}"
+            ),
+            Self::DepositsEndRefused { block_index, previous, got } => write!(
+                f,
+                "DepositsEndRefused: block {block_index} carries deposits_end {got}, not above the previous value {previous}"
+            ),
+            Self::DepositsEndMismatch { last, to } => write!(
+                f,
+                "DepositsEndMismatch: the stream ends at deposits_end {last}, the deposit range ends at {to}"
+            ),
+            Self::WithdrawalsMismatch { index } => write!(
+                f,
+                "WithdrawalsMismatch: index {index}: the block's withdrawals are not its slice of the deposit range"
+            ),
+            Self::WithdrawalSliceCountMismatch { blocks, slices } => write!(
+                f,
+                "WithdrawalSliceCountMismatch: {blocks} blocks but {slices} withdrawal slices"
             ),
             Self::ParentChainBroken { index } => write!(f, "ParentChainBroken: index {index}"),
             Self::HeaderRuleViolated { index, field } => {

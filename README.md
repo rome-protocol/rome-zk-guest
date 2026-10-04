@@ -94,16 +94,47 @@ without those dependencies. Building the standalone
 `bin/guests/bench-rome-dahash` packages also requires
 the nested layout.
 
-Clone this repository as `.fork/` at the root of a [rome-zk-evm](https://github.com/rome-protocol/rome-zk-evm) checkout:
+#### The flow for a Rome rollup operator
 
-```bash
-cd <your rome-zk-evm checkout>
-git clone --branch v0.1.1 https://github.com/rome-protocol/rome-zk-guest.git .fork
-cd .fork
-git submodule update --init third_party/ziskethone
-```
+You build the guest ELF for your own chain, check that your build matches what Rome rebuilds, and send Rome
+the ELF's sha256. In order:
 
-The nested `.fork/` checkout is ignored by the parent workspace and is not committed there.
+1. Clone [rome-zk-evm](https://github.com/rome-protocol/rome-zk-evm) at the release tag Rome gave you.
+2. Clone this repository into it as `.fork/`, at the matching release tag:
+
+   ```bash
+   git clone --branch <rome-zk-evm tag> https://github.com/rome-protocol/rome-zk-evm.git
+   cd rome-zk-evm
+   git clone --branch <guest tag> https://github.com/rome-protocol/rome-zk-guest.git .fork
+   cd .fork
+   git submodule update --init third_party/ziskethone
+   ```
+
+   The nested `.fork/` checkout is ignored by the parent workspace and is not committed there. Use a guest
+   tag that includes the `--genesis` option described below.
+3. Build the ELF with your chain's rendered genesis file, and tell the script which chain id you expect so
+   a wrong file is refused rather than built:
+
+   ```bash
+   bin/guests/stateless-validator-rome/build-elf.sh \
+     --genesis /path/to/your/rendered/genesis.json \
+     --expect-chain-id <your chain id>
+   ```
+
+   The script prints the ELF path, the ELF's sha256, and the sha256 and chain id of the genesis file that
+   was built into it. You need Linux, `rsync`, `python3`, and ZisK **1.2.0-alpha** installed (`cargo-zisk`
+   on your `PATH` or under `~/.zisk/bin`). A build takes about five minutes and about 2 GB of memory. The
+   build uses the committed `Cargo.lock` and refuses to run if that lock no longer matches the sources, so
+   the same checkout, genesis and ZisK version give the same ELF from any directory.
+4. Send Rome the ELF's sha256, along with your chain id. Rome rebuilds the ELF from the same tags and
+   your genesis, and compares the hash with yours.
+
+You do not compute the program verification key yourself. It comes from `cargo-zisk setup -e <ELF>`,
+which needs the ZisK proving key and about 37 GB of RAM (measured); Rome runs it on the ELF it rebuilt and
+registers the result.
+
+Without `--genesis` the script builds with the example genesis in `chains/tiber-200101.genesis.json`, as
+before.
 
 ### Execute the Program in ZisK
 

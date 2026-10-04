@@ -110,6 +110,7 @@ mod tests {
             timestamp: 1_757_000_005,
             gas_limit: 40_000_000,
             txs: vec![],
+            deposits_end: None,
         }];
         let blocks = vec![sample_reth_block(5, 1_757_000_005)];
         assert_eq!(check_equal(&decoded, &blocks), Ok(()));
@@ -123,6 +124,7 @@ mod tests {
             timestamp: 1_757_000_005,
             gas_limit: 40_000_000,
             txs: vec![],
+            deposits_end: None,
         }];
         let blocks = vec![sample_reth_block(5, 1_757_000_006)];
         assert_eq!(
@@ -144,6 +146,7 @@ mod tests {
             timestamp: 1_757_000_005,
             gas_limit: 40_000_000,
             txs: vec![],
+            deposits_end: None,
         }];
         let mut b = sample_reth_block(5, 1_757_000_005);
         b.header.gas_limit = 40_000_001; // +1 gas-limit mutation

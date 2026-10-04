@@ -25,6 +25,11 @@ pub mod error;
 pub mod input;
 pub mod run;
 
+// The genesis balance rule `build.rs` enforces; compiled here only so its unit tests run with this crate's.
+#[cfg(test)]
+#[path = "../genesis_balances.rs"]
+mod genesis_balances;
+
 pub use error::RomeGuestError;
-pub use input::{RomePublicInput, RomeWitnessInput};
+pub use input::{DepositInput, RomePublicInput, RomeWitnessInput};
 pub use run::{execute, run};

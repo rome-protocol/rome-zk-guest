@@ -5,9 +5,16 @@
 //! chain id it carries as a build warning on every build — so a wrong-chain build is visible in ordinary
 //! build output, not only discoverable by reading the ELF afterward — and re-runs whenever that env var
 //! or the file it names changes, rather than caching a stale embed silently.
+//!
+//! It also enforces the genesis balance rule (`genesis_balances.rs`): a genesis with more than one
+//! non-zero balance is refused, and the one allowed balance is printed as a `genesis-balance:` line.
 use std::path::Path;
 
 use sha2::{Digest, Sha256};
+
+// The balance rule lives in its own file so this crate's unit tests run the same code.
+#[path = "genesis_balances.rs"]
+mod genesis_balances;
 
 fn main() {
     let genesis_path =
@@ -28,6 +35,17 @@ fn main() {
             panic!("ROME_CHAIN_GENESIS={genesis_path}: config.chainId missing/non-numeric")
         });
 
+    // A genesis that funds more than one account is refused on every build path, including a plain
+    // `cargo build` of this crate. The single funded account, if any, is printed for the vault check.
+    let funded = match genesis_balances::check(&genesis) {
+        Ok(funded) => funded,
+        Err(e) => {
+            eprintln!("guest-rome build.rs: REFUSING — {genesis_path}: {e}");
+            std::process::exit(1);
+        }
+    };
+    println!("cargo:warning={}", genesis_balances::summary_line(&funded));
+
     println!(
         "cargo:warning=guest-rome embeds {} sha256={sha256_hex} chainId={chain_id}",
         Path::new(&genesis_path).display()
@@ -38,6 +56,7 @@ fn main() {
     // chain's rules without this warning being re-printed is exactly what this build script exists to
     // surface.
     println!("cargo:rerun-if-env-changed=ROME_CHAIN_GENESIS");
+    println!("cargo:rerun-if-changed=genesis_balances.rs");
     println!("cargo:rerun-if-changed={genesis_path}");
 }
 

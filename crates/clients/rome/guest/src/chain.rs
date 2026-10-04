@@ -13,12 +13,13 @@
 
 use std::sync::Arc;
 
+use alloy_eips::eip4895::Withdrawal;
 use alloy_primitives::{keccak256, Address, B256};
 use alloy_rlp::Encodable;
 use alloy_rpc_types_debug::ExecutionWitness;
 use reth_chainspec::ChainSpec;
 use reth_ethereum_primitives::Block;
-use rome_zk_executor_api::{canonical_header_rule, HeaderRule};
+use rome_zk_executor_api::{canonical_header_rule_with_withdrawals, HeaderRule};
 
 use crate::error::RomeGuestError;
 
@@ -91,12 +92,15 @@ fn check_header_rule(
 /// `parent_header` (or the previous block's own returned hash), checking contiguous numbering, the
 /// one-sided drift bound (`timestamp <= open_unix_ts + max_drift_secs`, checked arithmetic), and — per
 /// block, before stateless validation of that block — every rule-fixed header field against
-/// `rome_zk_executor_api::canonical_header_rule(chain_id, header.number, fee_recipient)`;
+/// `rome_zk_executor_api::canonical_header_rule_with_withdrawals(chain_id, header.number, fee_recipient,
+/// withdrawals[i])`, and the block body's own withdrawals against `withdrawals[i]` (`withdrawals[i]` is
+/// block `i`'s slice of the deposit range, empty for a block with no deposit);
 /// then runs stateless validation via `guest_reth`'s own path. Returns `(last_block_hash,
 /// gas_used_sum)` on success.
 #[allow(clippy::too_many_arguments)]
 pub fn chain_and_execute(
     blocks: &[Block],
+    withdrawals: &[Vec<Withdrawal>],
     witnesses: &[ExecutionWitness],
     parent_header: &alloy_consensus::Header,
     chain_spec: Arc<ChainSpec>,
@@ -113,6 +117,12 @@ pub fn chain_and_execute(
     }
     if blocks.is_empty() {
         return Err(RomeGuestError::EmptyBlockRange);
+    }
+    if withdrawals.len() != blocks.len() {
+        return Err(RomeGuestError::WithdrawalSliceCountMismatch {
+            blocks: blocks.len(),
+            slices: withdrawals.len(),
+        });
     }
 
     let first_number = blocks[0].header.number;
@@ -144,8 +154,19 @@ pub fn chain_and_execute(
                 bound,
             });
         }
-        let rule = canonical_header_rule(chain_id, header.number, fee_recipient);
+        let rule = canonical_header_rule_with_withdrawals(
+            chain_id,
+            header.number,
+            fee_recipient,
+            &withdrawals[i],
+        );
         check_header_rule(header, &rule, i)?;
+        // The body must carry exactly this block's slice of the deposit range: the header's root above
+        // is only a commitment to it, and the body is what execution applies.
+        if block.body.withdrawals.as_ref().map(|w| w.as_slice()) != Some(withdrawals[i].as_slice())
+        {
+            return Err(RomeGuestError::WithdrawalsMismatch { index: i });
+        }
 
         let public_keys = guest_reth::recover_signers(&block.body.transactions).map_err(|e| {
             RomeGuestError::StatelessValidationFailed {
@@ -180,6 +201,8 @@ pub fn chain_and_execute(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloy_eips::eip4895::Withdrawals;
+    use rome_zk_executor_api::canonical_header_rule;
 
     const CHAIN_ID: u64 = 200_101;
     const FEE_RECIPIENT: Address = Address::ZERO;
@@ -221,10 +244,19 @@ mod tests {
         }
     }
 
+    /// A post-Shanghai block with no withdrawals: the body carries `Some([])`, as every real block does.
+    fn empty_withdrawals_body(
+    ) -> alloy_consensus::BlockBody<reth_ethereum_primitives::TransactionSigned> {
+        alloy_consensus::BlockBody {
+            withdrawals: Some(Withdrawals::default()),
+            ..Default::default()
+        }
+    }
+
     fn honest_block(number: u64, timestamp: u64, parent_hash: B256) -> Block {
         Block {
             header: honest_header(number, timestamp, parent_hash),
-            body: Default::default(),
+            body: empty_withdrawals_body(),
         }
     }
 
@@ -235,6 +267,7 @@ mod tests {
         let parent = header(9, 1_757_000_000, B256::ZERO);
         let chain_spec = reth_chainspec::ChainSpec::default();
         let err = chain_and_execute(
+            &[],
             &[],
             &[],
             &parent,
@@ -255,6 +288,7 @@ mod tests {
         let chain_spec = reth_chainspec::ChainSpec::default();
         let err = chain_and_execute(
             &[b],
+            &[vec![]],
             &[],
             &parent,
             Arc::new(chain_spec),
@@ -282,6 +316,7 @@ mod tests {
         let chain_spec = reth_chainspec::ChainSpec::default();
         let err = chain_and_execute(
             &[b],
+            &[vec![]],
             &[witness],
             &parent,
             Arc::new(chain_spec),
@@ -303,6 +338,7 @@ mod tests {
         let chain_spec = reth_chainspec::ChainSpec::default();
         let err = chain_and_execute(
             &[b],
+            &[vec![]],
             &[witness],
             &parent,
             Arc::new(chain_spec),
@@ -333,6 +369,7 @@ mod tests {
         let chain_spec = reth_chainspec::ChainSpec::default();
         let err = chain_and_execute(
             &[b],
+            &[vec![]],
             &[witness],
             &parent,
             Arc::new(chain_spec),
@@ -361,6 +398,7 @@ mod tests {
         let chain_spec = reth_chainspec::ChainSpec::default();
         let err = chain_and_execute(
             &[b],
+            &[vec![]],
             &[witness],
             &parent,
             Arc::new(chain_spec),
@@ -388,6 +426,7 @@ mod tests {
         let chain_spec = reth_chainspec::ChainSpec::default();
         let err = chain_and_execute(
             &[b],
+            &[vec![]],
             &[witness],
             &parent,
             Arc::new(chain_spec),
@@ -415,6 +454,7 @@ mod tests {
         let chain_spec = reth_chainspec::ChainSpec::default();
         let err = chain_and_execute(
             &[b],
+            &[vec![]],
             &[witness],
             &parent,
             Arc::new(chain_spec),
@@ -443,6 +483,7 @@ mod tests {
         let chain_spec = reth_chainspec::ChainSpec::default();
         let err = chain_and_execute(
             &[b],
+            &[vec![]],
             &[witness],
             &parent,
             Arc::new(chain_spec),
@@ -471,6 +512,7 @@ mod tests {
         let chain_spec = reth_chainspec::ChainSpec::default();
         let err = chain_and_execute(
             &[b],
+            &[vec![]],
             &[witness],
             &parent,
             Arc::new(chain_spec),
@@ -498,6 +540,7 @@ mod tests {
         let chain_spec = reth_chainspec::ChainSpec::default();
         let err = chain_and_execute(
             &[b],
+            &[vec![]],
             &[witness],
             &parent,
             Arc::new(chain_spec),
@@ -525,6 +568,7 @@ mod tests {
         let chain_spec = reth_chainspec::ChainSpec::default();
         let err = chain_and_execute(
             &[b],
+            &[vec![]],
             &[witness],
             &parent,
             Arc::new(chain_spec),
@@ -559,7 +603,7 @@ mod tests {
         header.excess_blob_gas = Some(rule.excess_blob_gas);
         let b = Block {
             header,
-            body: Default::default(),
+            body: empty_withdrawals_body(),
         };
         let witness = ExecutionWitness::default();
         let chain_spec = reth_chainspec::ChainSpec::default();
@@ -568,6 +612,7 @@ mod tests {
         // when the header actually carries it, rather than always demanding ZERO.
         let err = chain_and_execute(
             &[b],
+            &[vec![]],
             &[witness],
             &parent,
             Arc::new(chain_spec),
@@ -579,6 +624,171 @@ mod tests {
         assert!(
             matches!(err, Err(RomeGuestError::StatelessValidationFailed { index: 0, .. })),
             "expected the header-rule check to pass and fail later in stateless validation, got {err:?}"
+        );
+    }
+
+    // ---- the withdrawals rule: the header root and the body both follow the block's slice -------------
+
+    fn withdrawal(index: u64, recipient_byte: u8, amount: u64) -> Withdrawal {
+        rome_zk_executor_api::deposit_withdrawal(
+            index,
+            Address::repeat_byte(recipient_byte),
+            amount,
+        )
+    }
+
+    /// The slice a block's header root and body are honestly built from in the tests below.
+    fn slice() -> Vec<Withdrawal> {
+        vec![withdrawal(7, 0x11, 1_000), withdrawal(8, 0x22, 2_000)]
+    }
+
+    /// A block whose header root is the honest root of `header_for` and whose body carries `body`.
+    fn block_with_withdrawals(
+        header_for: &[Withdrawal],
+        body: Option<Vec<Withdrawal>>,
+    ) -> (Block, alloy_consensus::Header) {
+        let parent = honest_header(9, 1_757_000_000, B256::ZERO);
+        let rule = canonical_header_rule_with_withdrawals(CHAIN_ID, 10, FEE_RECIPIENT, header_for);
+        let mut header = honest_header(10, 1_757_000_001, header_hash(&parent));
+        header.withdrawals_root = Some(rule.withdrawals_root);
+        let body = alloy_consensus::BlockBody {
+            withdrawals: body.map(Withdrawals::new),
+            ..Default::default()
+        };
+        (Block { header, body }, parent)
+    }
+
+    fn run_with_slice(
+        block: Block,
+        parent: &alloy_consensus::Header,
+        slice: Vec<Withdrawal>,
+    ) -> Result<(B256, u64), RomeGuestError> {
+        chain_and_execute(
+            &[block],
+            &[slice],
+            &[ExecutionWitness::default()],
+            parent,
+            Arc::new(reth_chainspec::ChainSpec::default()),
+            1_757_000_100,
+            60,
+            CHAIN_ID,
+            FEE_RECIPIENT,
+        )
+    }
+
+    /// An honest block (header root and body both follow the slice) passes both checks and goes on to
+    /// stateless validation, which fails here only because the witness is empty.
+    #[test]
+    fn a_block_with_its_honest_withdrawals_passes_the_rule_and_the_body_check() {
+        let (b, parent) = block_with_withdrawals(&slice(), Some(slice()));
+        let err = run_with_slice(b, &parent, slice());
+        assert!(
+            matches!(
+                err,
+                Err(RomeGuestError::StatelessValidationFailed { index: 0, .. })
+            ),
+            "expected both withdrawals checks to pass, got {err:?}"
+        );
+    }
+
+    /// A missing withdrawal in the body (the header root still the honest one) is refused by name.
+    #[test]
+    fn a_missing_withdrawal_is_refused_by_name() {
+        let mut body = slice();
+        body.pop();
+        let (b, parent) = block_with_withdrawals(&slice(), Some(body));
+        assert_eq!(
+            run_with_slice(b, &parent, slice()),
+            Err(RomeGuestError::WithdrawalsMismatch { index: 0 })
+        );
+    }
+
+    /// An extra withdrawal in the body is refused by name.
+    #[test]
+    fn an_extra_withdrawal_is_refused_by_name() {
+        let mut body = slice();
+        body.push(withdrawal(9, 0x33, 3_000));
+        let (b, parent) = block_with_withdrawals(&slice(), Some(body));
+        assert_eq!(
+            run_with_slice(b, &parent, slice()),
+            Err(RomeGuestError::WithdrawalsMismatch { index: 0 })
+        );
+    }
+
+    /// A wrong recipient, amount or index in the body is each refused by name.
+    #[test]
+    fn a_wrong_recipient_amount_or_index_is_refused_by_name() {
+        for mutate in [
+            (|w: &mut Withdrawal| w.address = Address::repeat_byte(0x99)) as fn(&mut Withdrawal),
+            |w| w.amount += 1,
+            |w| w.index += 1,
+            |w| w.validator_index = 1,
+        ] {
+            let mut body = slice();
+            mutate(&mut body[1]);
+            let (b, parent) = block_with_withdrawals(&slice(), Some(body));
+            assert_eq!(
+                run_with_slice(b, &parent, slice()),
+                Err(RomeGuestError::WithdrawalsMismatch { index: 0 })
+            );
+        }
+    }
+
+    /// A body with no withdrawals list at all is refused even where the slice is empty: a post-Shanghai
+    /// block carries `Some([])`.
+    #[test]
+    fn a_body_without_a_withdrawals_list_is_refused_by_name() {
+        let (b, parent) = block_with_withdrawals(&[], None);
+        assert_eq!(
+            run_with_slice(b, &parent, vec![]),
+            Err(RomeGuestError::WithdrawalsMismatch { index: 0 })
+        );
+    }
+
+    /// A deposit in the wrong block: the block carries (header root and body) a withdrawal the stream
+    /// puts in another block, so its slice is empty. The header rule refuses it by name.
+    #[test]
+    fn a_deposit_in_the_wrong_block_is_refused_by_name() {
+        let (b, parent) = block_with_withdrawals(&slice(), Some(slice()));
+        assert_eq!(
+            run_with_slice(b, &parent, vec![]),
+            Err(RomeGuestError::HeaderRuleViolated {
+                index: 0,
+                field: "withdrawals_root"
+            })
+        );
+        // The other way round: the stream gives this block a slice the block does not carry.
+        let (b, parent) = block_with_withdrawals(&[], Some(vec![]));
+        assert_eq!(
+            run_with_slice(b, &parent, slice()),
+            Err(RomeGuestError::HeaderRuleViolated {
+                index: 0,
+                field: "withdrawals_root"
+            })
+        );
+    }
+
+    /// One withdrawals slice per block: a different count is refused by name, never an index panic.
+    #[test]
+    fn a_wrong_number_of_withdrawal_slices_is_refused_by_name() {
+        let (b, parent) = block_with_withdrawals(&[], Some(vec![]));
+        let err = chain_and_execute(
+            &[b],
+            &[],
+            &[ExecutionWitness::default()],
+            &parent,
+            Arc::new(reth_chainspec::ChainSpec::default()),
+            1_757_000_100,
+            60,
+            CHAIN_ID,
+            FEE_RECIPIENT,
+        );
+        assert_eq!(
+            err,
+            Err(RomeGuestError::WithdrawalSliceCountMismatch {
+                blocks: 1,
+                slices: 0
+            })
         );
     }
 }

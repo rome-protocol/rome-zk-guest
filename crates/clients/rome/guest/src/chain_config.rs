@@ -13,10 +13,10 @@ use alloy_genesis::{ChainConfig, Genesis};
 use alloy_primitives::Address;
 
 /// The chain's genesis file, embedded at compile time. `ROME_CHAIN_GENESIS` is set by this repo's root
-/// `.cargo/config.toml` (see that file's own doc for why the root, not the bin crate, needs to set it) —
-/// `chains/tiber-200101.genesis.json`, matching the canonical genesis file (see
-/// this module's `embedded_config_matches_the_rome_zk_tiber_genesis_byte_for_byte` test, which checks
-/// exactly that).
+/// `.cargo/config.toml` (see that file's own doc for why the root, not the bin crate, needs to set it),
+/// and `bin/guests/stateless-validator-rome/build-elf.sh --genesis PATH` points it at your chain's genesis
+/// for one build. The checked-in default is `chains/tiber-200101.genesis.json`, an example chain. The
+/// `embedded_config_matches_the_deployment_genesis` test checks the embedded copy against the chain's genesis.
 const EMBEDDED_GENESIS_JSON: &str = include_str!(env!("ROME_CHAIN_GENESIS"));
 
 /// Parses the embedded genesis file once and caches it — [`embedded_chain_config`] and
@@ -29,13 +29,14 @@ const EMBEDDED_GENESIS_JSON: &str = include_str!(env!("ROME_CHAIN_GENESIS"));
 fn embedded_genesis() -> &'static Genesis {
     static GENESIS: OnceLock<Genesis> = OnceLock::new();
     GENESIS.get_or_init(|| {
-        serde_json::from_str(EMBEDDED_GENESIS_JSON)
-            .expect("ROME_CHAIN_GENESIS: embedded genesis file failed to parse as a genesis document")
+        serde_json::from_str(EMBEDDED_GENESIS_JSON).expect(
+            "ROME_CHAIN_GENESIS: embedded genesis file failed to parse as a genesis document",
+        )
     })
 }
 
 /// The chain's fee recipient (`header.beneficiary`/`coinbase`) has one source:
-/// the genesis `coinbase` field itself (`Address::ZERO` on Tiber), not a second,
+/// the genesis `coinbase` field itself (all zeros when the genesis has none), not a second,
 /// independently-settable `ROME_FEE_RECIPIENT` build-time env var that could silently disagree with the
 /// genesis this same ELF embeds. A build that wants a different fee recipient changes the genesis file,
 /// the one place `rome-zk-derive` and the sequencer also read it from (their own loaded genesis) — never
@@ -54,23 +55,37 @@ pub fn embedded_chain_config() -> ChainConfig {
 mod tests {
     use super::*;
 
-    /// The embedded genesis parses and carries Tiber's chain id (200101 — the same id
-    /// every other Tiber fixture in this guest already pins, e.g. `da.rs`'s real-batch fixture test).
-    #[test]
-    fn embedded_chain_config_parses_and_carries_tibers_chain_id() {
-        let config = embedded_chain_config();
-        assert_eq!(config.chain_id, 200_101);
+    /// The embedded genesis document as plain JSON, read independently of the `Genesis` type the accessors
+    /// use, so the tests below compare the accessors against what the file itself says.
+    fn embedded_json() -> serde_json::Value {
+        serde_json::from_str(EMBEDDED_GENESIS_JSON).expect("embedded genesis must be valid JSON")
     }
 
-    /// The embedded genesis's own `coinbase` field is the fee recipient — Tiber's
-    /// genesis (`chains/tiber-200101.genesis.json`) carries `"coinbase": "0x0…0"`, so this is
-    /// `Address::ZERO` today, but it is the genesis file driving it, not a second env var. RED before
-    /// the fix: `embedded_fee_recipient` read `option_env!("ROME_FEE_RECIPIENT")` instead, a value this
-    /// test cannot even influence.
+    /// The embedded config carries the chain id written in the genesis file this build embeds — whichever
+    /// chain that is (200101 for the checked-in example genesis, another id when the build names another
+    /// genesis through `ROME_CHAIN_GENESIS`).
+    #[test]
+    fn embedded_chain_config_carries_the_genesis_chain_id() {
+        let expected = embedded_json()["config"]["chainId"]
+            .as_u64()
+            .expect("the embedded genesis must have a numeric config.chainId");
+        assert_ne!(expected, 0, "a genesis chain id of 0 is not a chain");
+        assert_eq!(embedded_chain_config().chain_id, expected);
+    }
+
+    /// The embedded genesis's own `coinbase` field is the fee recipient (all zeros when the genesis has no
+    /// `coinbase`, which is what `alloy_genesis` also assumes) — it is the genesis file driving it, not a
+    /// second env var.
     #[test]
     fn embedded_fee_recipient_is_the_genesis_coinbase() {
+        let expected = match embedded_json().get("coinbase").and_then(|v| v.as_str()) {
+            Some(text) => text
+                .parse::<Address>()
+                .expect("the embedded genesis's coinbase must be an address"),
+            None => Address::ZERO,
+        };
+        assert_eq!(embedded_fee_recipient(), expected);
         assert_eq!(embedded_fee_recipient(), embedded_genesis().coinbase);
-        assert_eq!(embedded_fee_recipient(), Address::ZERO);
     }
 
     /// The embedded config must match the canonical genesis config.
@@ -80,20 +95,20 @@ mod tests {
     /// failure) when the parent workspace is not present alongside this fork checkout — this crate's own
     /// tests must still pass in the fork's standalone CI, which checks out only this repo.
     #[test]
-    fn embedded_config_matches_the_rome_zk_tiber_genesis_byte_for_byte() {
+    fn embedded_config_matches_the_deployment_genesis() {
         // The deployment's own genesis file, if the environment names one: this check compares the embedded copy
         // with the genesis the chain was started from, and skips when no such file is given.
         let Some(rome_zk_genesis_path) = std::env::var_os("GUEST_CHECK_GENESIS_JSON") else {
             eprintln!(
-                "SKIPPED: embedded_config_matches_the_rome_zk_tiber_genesis_byte_for_byte — set \
-                 GUEST_CHECK_GENESIS_JSON to the Tiber genesis.json to run this check."
+                "SKIPPED: embedded_config_matches_the_deployment_genesis — set \
+                 GUEST_CHECK_GENESIS_JSON to the chain's genesis.json to run this check."
             );
             return;
         };
         let raw = std::fs::read_to_string(&rome_zk_genesis_path)
             .expect("GUEST_CHECK_GENESIS_JSON must name a readable genesis file");
         let rome_zk_genesis: Genesis =
-            serde_json::from_str(&raw).expect("the Tiber genesis.json must parse");
+            serde_json::from_str(&raw).expect("the deployment genesis.json must parse");
 
         let embedded = embedded_chain_config();
         let embedded_json =
@@ -102,8 +117,8 @@ mod tests {
             .expect("rome-zk's ChainConfig must serialize");
         assert_eq!(
             embedded_json, rome_zk_json,
-            "guest-rome's chains/tiber-200101.genesis.json has drifted from the Tiber genesis.json — the \
-             copy here must be re-synced"
+            "the genesis embedded in this guest has drifted from the deployment's genesis.json — the \
+             embedded copy must be re-synced"
         );
     }
 }
