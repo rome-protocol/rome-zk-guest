@@ -122,7 +122,7 @@ the ELF's sha256. In order:
    ```
 
    The script prints the ELF path, the ELF's sha256, and the sha256 and chain id of the genesis file that
-   was built into it. You need Linux, `rsync`, `python3`, and ZisK **1.2.0-alpha** installed (`cargo-zisk`
+   was built into it. You need Linux, `rsync`, `python3`, and ZisK **1.3.1-alpha** installed (`cargo-zisk`
    on your `PATH` or under `~/.zisk/bin`). A build takes about five minutes and about 2 GB of memory. The
    build uses the committed `Cargo.lock` and refuses to run if that lock no longer matches the sources, so
    the same checkout, genesis and ZisK version give the same ELF from any directory.

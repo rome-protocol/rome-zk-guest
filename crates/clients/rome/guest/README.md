@@ -144,7 +144,7 @@ and `ROME_CHAIN_GENESIS` is set with `force = true` so that a stray environment 
 change the chain. The staged copy of the config is the one place left that keeps every build input in the
 staging tree.
 
-**Example.** The default build (the example genesis, ZisK 1.2.0-alpha, rome-zk-evm v0.2.0 at commit
+**Example, on ZisK 1.2.0-alpha.** The default build (the example genesis, ZisK 1.2.0-alpha, rome-zk-evm v0.2.0 at commit
 `0e76f155140f47b8c13be3f89ff5baab3c644120`, this guest with deposits) gives ELF sha256
 `b68f8f068c08ca4998a25dda307a2610ce21f6d6e4410f11da61812c8615e58a` and programVK
 `0x4258973dbd9edf658f2aed241c217d563e95338ad67bfaaebf30848b42f0dc77`. Built against rome-zk-evm v0.1.3 the
@@ -163,7 +163,7 @@ Send the ELF's sha256 to Rome. The program verification key for an ELF comes fro
 `cargo-zisk setup -e <ELF>`, which needs the ZisK proving key on the machine and about 37 GB of RAM
 (measured: 36,559,840 KiB peak, 37 seconds for the example ELF; no proof is needed). Rome rebuilds your ELF, computes the key and registers it for your chain.
 
-The ZisK version is pinned to **1.2.0-alpha**. Another version builds a different ELF.
+The ZisK version is pinned to **1.3.1-alpha**. Another version builds a different ELF.
 
 ## Why `rome-zk-layouts`/`rome-zk-merkle`/`rome-zk-channel` are path dependencies, not git
 
@@ -289,6 +289,37 @@ committed): a missing withdrawal, an extra withdrawal, a wrong recipient, amount
 end value above or below `to` (`DepositsEndMismatch`); an equal or decreasing value, or a fifth field on
 block 0 equal to `from` (`DepositsEndRefused`). A fifth field added to deposit-free batch 3930 is refused as
 `DepositsEndMismatch`.
+
+### On ZisK 1.3.1-alpha
+
+The guest builds on the zisk-eth-client 0.13.1 base with ZisK 1.3.1-alpha (toolchain `zisk-4.0.0`). No rule of
+the guest changed. The same four inputs as above, run with `ziskemu` 1.3.1 on an ELF built from the same
+sources, commit the same 256-byte output as under 1.2.0 (the 208 public bytes, then 48 zero bytes, which is 64
+words of 4 bytes). The fifteen refusal inputs listed above are refused by the same names with the same
+messages, and nothing is committed for them. Only the step counts moved.
+
+| Input | Steps, 1.2.0-alpha | Steps, 1.3.1-alpha | sha256 of the 256-byte output (both) |
+|---|---|---|---|
+| reset6 batch 1 | 3,048,250 | 3,027,017 | `7ba09e8e55b52a0a726c8aabaa9ecd06d0556ce01e51e2588ac7a9e7ba802227` |
+| batch 3930 | 597,615 | 593,104 | `679d24530c33cb0b8fdbb9d014e2e28f15fda83b00852b1911587d41f4e3570f` |
+| synthetic small | 283,404 | 281,119 | `5a3ae86730cf98dcd0af14b08b8740690dcb80d5557e1d45b08e78fc539a3791` |
+| synthetic full | 7,630,115 | 7,570,623 | `2d6a36606f494f3abb38289cd31ba5db1bf62454c8cebf37c0e8aa7645a90c65` |
+
+The build for the genesis of the reset6 batch (chain id 200101, genesis sha256
+`15367d781b458217af60de3ec87e2358ecfc219494ecf46090811612693f856f`) gives ELF sha256
+`238efa4f8479d909bdeb9b254102e3bc5563d6bd7c8fd173f2474040cb4385a5`, and the same hash from two clean builds,
+each from a fresh copy of the sources in a fresh container, with the rome-zk-evm crates at v0.2.1 (commit
+`05321e1f9c935cadae034994434b36b75c305cd4`; the ELF hash moves with those crates). Its programVK is
+`0x77c143cfbae4b986c642f0bed1be5ee2bb33338eee23cc5b3c20c86043cc8dc2` and the vadcop_final root of the 1.3.1-alpha
+key set is `0xc3f12b9f8707c6a1e96df2bf6702c2ebdfbafedabeac654644a380befe091ac4`.
+
+`cargo-zisk prove --plonk` of reset6 batch 1 with that ELF, on the CPU build with no GPU, produced a PLONK proof of
+3,078 bytes. `cargo-zisk verify` accepts it, and ZisK's own `export-solidity-calldata` gives a 1,344-byte
+proof payload (768-byte proof, programVK, root, 512 bytes of public values) whose 64 public words are the
+words of the emulator run above, each in an 8-byte slot. The prover ran 20 minutes 20 seconds on a 32-core machine with 125 GB of
+RAM: 158 s to start, 607 s for the inner proofs, 205 s for the PLONK wrap. The proving key's one-time tree
+generation is part of that time. The key directories hold 40 GB unpacked, 102 GB once the CPU proof has
+generated its constant trees.
 
 ## Known deviation from `guest-reth`'s own input shape
 

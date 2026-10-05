@@ -15,7 +15,7 @@ panic = "abort"
 [dependencies]
 guest-rome = { path = "../../../crates/clients/rome/guest" }
 
-ziskos = "1.2.0-alpha"
+ziskos = "1.3.1-alpha"
 
 # alloy — pinned exact (matching this ELF's stateless-validator-reth sibling's own resolved Cargo.lock):
 # this is its own standalone workspace (own Cargo.lock), so nothing else here constrains guest-rome's
